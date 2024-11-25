@@ -5,6 +5,7 @@ from mininet.net import Mininet
 from mininet.log import lg, info
 from mininet.util import dumpNodeConnections
 from mininet.cli import CLI
+from mininet.clean import cleanup
 
 from subprocess import Popen, PIPE
 from time import sleep, time
@@ -63,12 +64,16 @@ class BBTopo(Topo):
 
     def build(self, n=2):
         # TODO: create two hosts
+        h1 = self.addHost('h1')
+        h2 = self.addHost('h2')
 
         # Here I have created a switch.  If you change its name, its
         # interface names will change from s0-eth1 to newname-eth1.
         switch = self.addSwitch('s0')
 
         # TODO: Add links with appropriate characteristics
+        self.addLink(h1, switch, bw=args.bw_host, delay=args.delay, max_queue_size=args.maxq)
+        self.addLink(switch, h2, bw=args.bw_net, delay=args.delay, max_queue_size=args.maxq)
 
 # Simple wrappers around monitoring utilities.  You are welcome to
 # contribute neatly written (using classes) monitoring scripts for
@@ -86,6 +91,8 @@ def start_iperf(net):
     # TODO: Start the iperf client on h1.  Ensure that you create a
     # long lived TCP flow.
     # client = ... 
+    print("Starting iperf client...")
+    client = h1.popen(f"iperf -c {h2.IP()} -t {args.time} -i 1", shell=True)
 
 def start_qmon(iface, interval_sec=0.1, outfile="q.txt"):
     monitor = Process(target=monitor_qlen,
@@ -101,7 +108,10 @@ def start_ping(net):
     # Hint: Use host.popen(cmd, shell=True).  If you pass shell=True
     # to popen, you can redirect cmd's output using shell syntax.
     # i.e. ping ... > /path/to/ping.
-    pass
+    h1 = net.get('h1')
+    h2 = net.get('h2')
+    print("Starting ping train...")
+    h1.popen(f"ping -i 0.1 -c {10 * args.time} {h2.IP()} > {args.dir}/ping.txt", shell=True)
 
 def start_webserver(net):
     h1 = net.get('h1')
@@ -109,10 +119,25 @@ def start_webserver(net):
     sleep(1)
     return [proc]
 
+def measure_webpage_fetch_time(net):
+    h2 = net.get('h2')
+    times = []
+    for _ in range(3):
+        start = time()
+        h2.cmd(f"curl -o /dev/null -s -w '%{{time_total}}' http://10.0.0.1/index.html >> {args.dir}/curl_times.txt")
+        end = time()
+        times.append(end - start)
+        sleep(5)
+    return times
+
 def bufferbloat():
     if not os.path.exists(args.dir):
         os.makedirs(args.dir)
     os.system("sysctl -w net.ipv4.tcp_congestion_control=%s" % args.cong)
+
+    # cleanup last execution
+    cleanup()
+
     topo = BBTopo()
     net = Mininet(topo=topo, host=CPULimitedHost, link=TCLink)
     net.start()
@@ -121,6 +146,8 @@ def bufferbloat():
     dumpNodeConnections(net.hosts)
     # This performs a basic all pairs ping test.
     net.pingAll()
+
+    start_ping(net)
 
     # TODO: Start monitoring the queue sizes.  Since the switch I
     # created is "s0", I monitor one of the interfaces.  Which
@@ -132,6 +159,8 @@ def bufferbloat():
 
     # TODO: Start iperf, webservers, etc.
     # start_iperf(net)
+    start_iperf(net)
+    start_webserver(net)
 
     # TODO: measure the time it takes to complete webpage transfer
     # from h1 to h2 (say) 3 times.  Hint: check what the following
@@ -144,18 +173,31 @@ def bufferbloat():
     # Hint: have a separate function to do this and you may find the
     # loop below useful.
     start_time = time()
+    time_measures = []
     while True:
         # do the measurement (say) 3 times.
-        sleep(5)
         now = time()
         delta = now - start_time
         if delta > args.time:
             break
         print("%.1fs left..." % (args.time - delta))
 
+        h1 = net.get('h1')
+        h2 = net.get('h2')
+        for i in range(3):
+            webpage_time = h2.popen('curl -o /dev/null -s -w %%{time_total} %s/http/index.html' %
+                    h1.IP()).communicate()[0]
+            time_measures.append(float(webpage_time))
+        sleep(5)
+
     # TODO: compute average (and standard deviation) of the fetch
     # times.  You don't need to plot them.  Just note it in your
     # README and explain.
+    with open('%s/metrics.txt' % (args.dir), 'w') as f:
+        avg_time = sum(time_measures) / len(time_measures)
+        stddev_time = math.sqrt(sum((x - avg_time) ** 2 for x in time_measures) / len(time_measures))
+        f.write(f"Average fetch time: {avg_time:.4f} seconds\n")
+        f.write(f"Standard deviation of fetch times: {stddev_time:.4f} seconds\n")
 
     # Hint: The command below invokes a CLI which you can use to
     # debug.  It allows you to run arbitrary commands inside your
