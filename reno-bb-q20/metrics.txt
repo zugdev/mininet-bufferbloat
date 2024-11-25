@@ -1,0 +1,2 @@
+Average fetch time: 0.2450 seconds
+Standard deviation of fetch times: 0.2132 seconds
