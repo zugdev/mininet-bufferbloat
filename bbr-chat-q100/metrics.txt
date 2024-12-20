@@ -1,0 +1,2 @@
+Average message latency: 0.0147 seconds
+Standard deviation of latencies: 0.0089 seconds
