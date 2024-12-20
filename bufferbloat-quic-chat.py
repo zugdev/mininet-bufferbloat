@@ -86,7 +86,6 @@ def start_ping(net):
 def start_quic_server(net):
     """
     Start a QUIC (HTTP/3) server on h2.
-    The server should serve files from the directory it's run in.
     We assume 'http3_server.py' is in the same directory and will serve 'message.txt'.
     """
     h2 = net.get('h2')
@@ -98,7 +97,7 @@ def start_quic_server(net):
 def messages_bufferbloat():
     """
     Main function to set up the topology, run the QUIC server,
-    and simulate instant messaging by sending small messages at random intervals.
+    and simulate instant messaging by sending small messages at very short intervals.
     """
     if not os.path.exists(args.dir):
         os.makedirs(args.dir)
@@ -126,43 +125,42 @@ def messages_bufferbloat():
     h2 = net.get('h2')
 
     # We will simulate sending short messages for args.time seconds.
-    # For each message:
-    #   1. Generate a random message string.
-    #   2. Write it to 'message.txt' on h2.
-    #   3. From h1, request (fetch) this file via QUIC.
-    # Measure the latency of the fetch as the message delivery time.
+    # To induce more bufferbloat, send messages at a much higher rate.
     #
-    # Messages are sent at random intervals between 0.1 and 1.0 seconds.
+    # For each message:
+    #   1. Generate a random message.
+    #   2. Write it to 'message.txt' on h2.
+    #   3. From h1, fetch it via QUIC.
+    # Measure the latency for each fetch.
+    #
+    # Now messages are sent with intervals between 0.001 and 0.01 seconds,
+    # resulting in a much higher message rate.
 
     latencies = []
     start_time = time()
     while True:
         now = time()
-        delta = now - start_time
-        if delta > args.time:
+        if now - start_time > args.time:
             break
 
-        # Random interval between messages
-        interval = random.uniform(0.1, 1.0)
+        # Random interval much smaller now to send more messages quickly
+        interval = random.uniform(0.001, 0.01)
         sleep(interval)
 
         # Generate a random message
-        # This can be a random number or any random string.
         random_message = f"Random message: {random.randint(0, 100000)}"
 
-        # Write this random message to message.txt on h2
-        # We use echo to overwrite the file
+        # Write the random message to message.txt on h2
         h2.cmd(f"echo '{random_message}' > message.txt")
 
-        # Now measure how long it takes for h1 to fetch this message
+        # Measure how long it takes for h1 to fetch this message
         msg_start = time()
         h1.cmd(f"python3 http3_client.py --ca-certs cert.pem https://{h2.IP()}:4433/message.txt > /dev/null 2>&1")
         msg_end = time()
 
-        # Record the latency
         latencies.append(msg_end - msg_start)
 
-    # Save latencies to a file
+    # Save latencies
     with open('%s/latencies.txt' % (args.dir), 'w') as f:
         for lat in latencies:
             f.write(f"{lat}\n")

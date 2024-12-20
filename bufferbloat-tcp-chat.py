@@ -98,7 +98,8 @@ def start_webserver(net):
 def messages_bufferbloat():
     """
     Main function that sets up the experiment.
-    Instead of a continuous large flow, we simulate short message transfers via TCP.
+    Instead of a continuous large flow, we simulate short message transfers via TCP,
+    but at a much higher rate to induce more bufferbloat.
     """
     if not os.path.exists(args.dir):
         os.makedirs(args.dir)
@@ -127,13 +128,9 @@ def messages_bufferbloat():
     h1 = net.get('h1')
     h2 = net.get('h2')
 
-    # We simulate sending small messages for args.time seconds.
-    # For each message:
-    #   1. Generate a random message string.
-    #   2. Write it to 'message.txt' on h1.
-    #   3. From h2, fetch the file via curl and measure the latency.
-    # Messages are fetched at random intervals between 0.1 and 1.0 seconds.
-
+    # Simulate sending small messages for args.time seconds.
+    # Now send messages at a much higher rate:
+    # Random interval between messages is now between 0.001s and 0.01s.
     latencies = []
     start_time = time()
     while True:
@@ -141,8 +138,8 @@ def messages_bufferbloat():
         if now - start_time > args.time:
             break
 
-        # Random interval before next message
-        interval = random.uniform(0.1, 1.0)
+        # Much smaller random interval to send more messages quickly
+        interval = random.uniform(0.001, 0.01)
         sleep(interval)
 
         # Generate a random message
@@ -152,7 +149,6 @@ def messages_bufferbloat():
 
         # Measure the time it takes to fetch the message from h2
         msg_start = time()
-        # Use curl to fetch the message.txt from h1
         h2.cmd(f"curl -o /dev/null -s -w '%{{time_total}}' http://{h1.IP()}:8000/message.txt > /dev/null 2>&1")
         msg_end = time()
 
