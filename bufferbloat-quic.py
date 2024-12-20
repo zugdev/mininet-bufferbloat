@@ -71,14 +71,19 @@ async def start_quic_server(host, port, certificate, private_key):
     configuration.alpn_protocols = H3_ALPN  # HTTP/3 ALPN
     configuration.load_cert_chain(certificate, private_key)
 
-    async with serve(
-        host,
-        port,
+    print(f"Starting QUIC server on {host}:{port}...")
+    server = await serve(
+        host=host,
+        port=port,
         configuration=configuration,
         create_protocol=Http3Server,
-    ) as server:
-        print(f"QUIC server running at {host}:{port}")
-        await asyncio.sleep(args.time)
+    )
+
+    try:
+        await asyncio.sleep(args.time)  # Keep the server running
+    finally:
+        server.close()
+        await server.wait_closed()
 
 class Http3Server(QuicConnectionProtocol):
     def __init__(self, *args, **kwargs):
@@ -94,16 +99,20 @@ async def start_quic_client(host, port):
     configuration = QuicConfiguration(is_client=True)
     configuration.alpn_protocols = H3_ALPN
 
+    print(f"Connecting to QUIC server at {host}:{port}...")
     async with serve(
-        host,
-        port,
+        host=host,
+        port=port,
         configuration=configuration,
     ) as protocol:
         http = H3Connection(protocol._quic)
         print("Client connected and ready to send requests.")
         # Example request
-        response = await http.request(f"https://{host}:{port}/index.html")
-        print("Response:", response)
+        try:
+            response = await http.request(f"https://{host}:{port}/index.html")
+            print("Response:", response)
+        except Exception as e:
+            print("Request failed:", e)
 
 def start_qmon(iface, interval_sec=0.1, outfile="q.txt"):
     monitor = Process(target=monitor_qlen,
