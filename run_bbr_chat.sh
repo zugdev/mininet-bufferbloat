@@ -13,14 +13,14 @@ delay=10
 iperf_port=5001
 
 for qsize in 20 100; do
-    dir=bbr-bb-q$qsize
+    dir=bbr-chat-q$qsize
 
     # TODO: Run bufferbloat.py here...
-    python3 bufferbloat-tcp.py --cong bbr --bw-net $bwnet --delay $delay --time $time --maxq $qsize --dir $dir
+    python3 bufferbloat-tcp-chat.py --cong bbr --bw-net $bwnet --delay $delay --time $time --maxq $qsize --dir $dir
 
     # TODO: Ensure the input file names match the ones you use in
     # bufferbloat.py script.  Also ensure the plot file names match
     # the required naming convention when submitting your tarball.
-    python3 plot_queue.py -f $dir/q.txt -o bbr-buffer-q$qsize.png
-    python3 plot_ping.py -f $dir/ping.txt -o bbr-rtt-q$qsize.png
+    python3 plot_queue.py -f $dir/q.txt -o bbr-chat-buffer-q$qsize.png
+    python3 plot_ping.py -f $dir/ping.txt -o bbr-chat-rtt-q$qsize.png
 done
